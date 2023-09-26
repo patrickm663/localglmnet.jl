@@ -35,9 +35,16 @@ TO ADD
 
 We calulate the Jacobian after passing a single vector of data through the NN and the actual model. The results indicate the gradients are fairly similar, which means the NN picked up the underlying relation fairly well.
 
+TO ADD
+
 As a rough measure of variable importance, we take the average of the isolated effects and rank them by absolute magnitude.
 
 TO ADD
+
+## Environment
+
+The above analysis uses Julia 1.10.0-beta2 and a Pluto.jl notebook, which can be found in `src/`.
+
 ## Acknowledgements
 
 The full print of Richman et al. is available at: https://arxiv.org/pdf/2107.11059.pdf
