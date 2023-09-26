@@ -24,22 +24,57 @@ We then add the outputs from the isolated outputs to form an additive decomposit
 Finally, we find an analytical approximation for the NN using `SymbolicRegression.jl`.
 
 ## Results
+**_An HTML of the full investigation can be found in the `docs/` folder_**.
 
-The MSE over 7 500 epochs:
+When trained over 7 500 epochs, the model seemed to avoid overfitting by maintaining high accuracy in the validation set:
 
-!(mse)["assets/loss_mse.png"]
+![mse](assets/mse_loss.png)
 
-The MSE for the training, validation, and testing sets:
+The MSE is as follows:
 
-TO ADD
+- **Train**: 0.000424
+- **Valid**: 0.000727
+- **Test**: 0.000849
 
-We calulate the Jacobian after passing a single vector of data through the NN and the actual model. The results indicate the gradients are fairly similar, which means the NN picked up the underlying relation fairly well.
+The actual v predicted plot over the Test set shows very good results across the entire range:
 
-TO ADD
+![avp](assets/actual_v_predicted_nn.png)
 
-As a rough measure of variable importance, we take the average of the isolated effects and rank them by absolute magnitude.
+We take two approaches to better understand the NN:
+- investigate output when isolating a particular feature and passing it through the NN -- all else set to zero
+- find the Jacobian using some input data and investigate the gradients per feature
 
-TO ADD
+The results indicate the gradients are fairly similar to our true underlying model, and we can derive naive partial dependence plots to analyse the relatove impact of a feature.
+
+![grad1](isolated_pdp.png)
+
+Below is the gradient of $x_1$ and the gradient multiplied by the feature.
+![grad2](beta_1.png)
+![grad3](beta_x_1.png)
+
+As a rough measure of variable importance, we take the average absolute value of the features' gradient over a subset of data and plot the results. Larger values indicate a feature is (approximately) more impactful in the model's output:
+
+![vip](assets/gradient_based_VI.svg)
+
+Per Richman et al., we take the dot product of the gradient of the feature and the feature itself and sum over all features. We add any bias term to the model.
+
+**_As of now, it is likely something is mispecified in my code since the approximation was not good. PRs are welcome and encouraged if you know the paper and can spot my mistake! -- the other results from the paper re the gradients all match visually :)_**
+
+As an alternative, we sum the isolated feature outputs and any bias term. In the future, this could be made more robust by applying a weighting to the results and including interaction terms. Furthermore, analytic approximations for each of the terms could perhaps be derived -- the same applies to the gradients refered to earlier.
+
+The MSE from the approach above is 0.3001.
+
+![algn](actual_v_predicted_algn.png)
+
+Finally, we apply symbolic regression to the fitted neural network which led to the following approximation (a slight adjustment to round the coefficients to make them more manageable -- further details in the notebook):
+
+$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}|x_3|\sin(2x_3) +\frac{1}{2}x_4 x_5$$
+
+The MSE of this approximation is 0.0837.
+
+Altogether, the actual v. predicted for all models is:
+
+![avpa](actual_v_predicted_comb.png)
 
 ## Environment
 
