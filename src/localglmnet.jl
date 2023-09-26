@@ -27,7 +27,7 @@ md"""
 md"""
 In this notebook, we discuss neural networks and methodologies to interpret them.
 
-This work is based on _LocalGLMnet: Interpretable deep learning for tabular data_ by Richman & Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf))
+Some of this work is based on _LocalGLMnet: Interpretable deep learning for tabular data_ by Richman & Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf))
 """
 
 # ╔═╡ 8271339c-831c-4a2d-8d6e-28321cb3c67c
@@ -122,11 +122,11 @@ Per Richman _et al._, this can lead to a LocalGLMnet by establishing a _skip con
 
 # ╔═╡ 9aabe634-0bad-4529-bb8d-760b91d891e9
 model = Chain(
-	Dense(8 => 32, tanh; init=NN_seed),
-	Dense(32 => 64, tanh; init=NN_seed),
-	Dense(64 => 8, tanh; init=NN_seed),
+	Dense(8 => 32, Flux.tanh; init=NN_seed),
+	Dense(32 => 64, Flux.tanh; init=NN_seed),
+	Dense(64 => 8, Flux.tanh; init=NN_seed),
 	Dense(8 => 1, identity; init=NN_seed)
-) |> gpu
+) |> gpu 
 
 # ╔═╡ 3a941ea0-524a-40f6-a92c-4a8de4918d3f
 md"""
@@ -136,7 +136,7 @@ Our model uses the default implementation of Adam over 5 000 epochs. The mean sq
 # ╔═╡ 85381d05-fd50-43a4-a462-e73184c448d5
 begin
 	opt_params = Flux.setup(Flux.Adam(), model)
-	epochs = 5_000
+	epochs = 7_500
 	loss(y_pred, y_actual) = Flux.Losses.mse(y_pred, y_actual)
 end
 
@@ -240,9 +240,6 @@ md"""
 We can then pass our data through the model to generate output, subtracting any bias term (below, we assume the bais comes from our dataset, $X$, for convenience).
 """
 
-# ╔═╡ 031ba09d-1c5c-44cf-bdbc-e21ee2dc0eb5
-
-
 # ╔═╡ e4a90c03-be04-453b-b317-ae41d59a6612
 function naive_pdp(xᵢ)
 	weights::Vector, _ = Flux.destructure(model) |> cpu
@@ -275,7 +272,10 @@ We can also investigate the bias term -- if any.
 """
 
 # ╔═╡ b58aa8a7-3053-4c1f-920f-5c1f72de4e2a
-model(n_feature(X, [0])' |> gpu)
+naive_pdp(n_feature(X, [0]))'
+
+# ╔═╡ d664f697-0f94-4aa0-8595-36055b9381a0
+#Flux.jacobian(model |> cpu, n_feature(X_valid, [0])')
 
 # ╔═╡ 67d3165d-ac55-43ff-ae08-afcd6949318b
 md"""
@@ -307,7 +307,14 @@ begin
 end
 
 # ╔═╡ 9fb27561-c74f-40aa-9a0f-29c651c6cb3f
-Plots.scatter3d(n_feature(X, [5])[:, 5], n_feature(X, [6])[:, 6], vec(naive_pdp(n_feature(X, [5, 6]))' |> cpu), title="3D Interaction Plot between x₅ and x₆", label="", xlabel="x₅", ylabel="x₆", zlabel="f(x)")
+begin
+	l2 = @layout [a d; b c]
+	p5 = scatter3d(n_feature(X, [5])[:, 5], n_feature(X, [6])[:, 6], vec(naive_pdp(n_feature(X, [5,6]))' |> cpu), label="", xlabel="x₅", ylabel="x₆", zlabel="f(x)")
+	p6 = Plots.scatter(n_feature(X, [5])[:, 5], naive_pdp(n_feature(X, [5]))' |> cpu, xlabel="x₅", ylabel = "f(x)", label="")
+	p7 = Plots.scatter(n_feature(X, [6])[:, 6], naive_pdp(n_feature(X, [6]))' |> cpu, xlabel="x₆", ylabel = "f(x)", label="")
+	p8 = Plots.scatter(n_feature(X, [5])[:, 5], n_feature(X, [6])[:, 6], xlabel="x₅", ylabel = "x₆", label="")
+	Plots.plot(p5, p6, p7, p8, layout = l2)
+end
 
 # ╔═╡ bc36d6f7-4021-4137-9d80-eac0ba05fa8c
 md"""
@@ -315,31 +322,44 @@ _I am not too sure what the significance of the interpretation below is, but if 
 """
 
 # ╔═╡ c86733fe-2f68-44b0-a7ad-6e34424d5177
-Plots.heatmap(model[1:(end-1)](X')' |> cpu, title="Heatmap over the last hidden layer of the trained NN", xticks=1:8)
-
-# ╔═╡ 6ad034a3-cd0f-4f4f-9861-d65f56d228e3
-var(((naive_pdp(n_feature(X_train, [0]))' |> cpu)))
+Plots.heatmap(model[1:(end-1)](X_train')' |> cpu, title="Heatmap over the last hidden layer of the trained NN", xticks=1:8)
 
 # ╔═╡ fc0d6dfe-8136-4fcb-8802-d0d32b309cdb
 md"""
 ### LocalGLMnet
 """
 
+# ╔═╡ 8712bce1-a627-40b5-9f75-6b5ccdfc847d
+md"""
+A LocalGLMnet model is defined as a skip-connection model, where an additive decomposition of the model is created as follows:
+
+$$g(𝒙) = \beta_0 + \sum_{i}\beta(x_i)x_i$$
+
+
+"""
+
+# ╔═╡ 49267399-03c4-42b0-b9a2-f49abf1c0d69
+
+
 # ╔═╡ 492726a6-5108-4754-be7a-7bb146e911f9
-function localglmnet(m, X_::Union{CuArray, Matrix})
+function localglmnet(m, X_::Union{CuArray, Matrix})::Matrix
 	ret::Matrix = deepcopy(X_) |> cpu
 	weights::Vector, _ = Flux.destructure(m) |> cpu
 	N::Int64, M::Int64 = size(ret)
-	β₀::Vector = repeat([weights[end]], N) |> cpu
 	output = zeros(N)
-	for i ∈ 1:8
-		output = output .+ ((naive_pdp(n_feature(ret, [i]))' |> cpu) .* ret[:, i])
+	for i ∈ 0:M
+		output = output + (m(n_feature(ret, [i])' |> gpu) |> cpu)'
 	end
-	return (output |> cpu) + β₀
+	return output
 end
 
 # ╔═╡ a1308b55-46a4-41ee-90c4-b8ad91310058
 y_lgn = localglmnet(model, X_train)
+
+# ╔═╡ 7670f058-702d-4d6c-9d08-018f14b29f1c
+md"""
+We compute the MSE for comparitive purposes, and produce an Actual v. Predicted plot.
+"""
 
 # ╔═╡ c0e10a7f-44f5-4f95-a3b3-d04d34dee199
 loss(y_train |> cpu, y_lgn)
@@ -349,6 +369,13 @@ begin
 	Plots.scatter(y_train |> cpu, y_lgn, xlim = (-5, 5), ylim = (-5, 5), yaxis = "LocalGLMNet Prediction", xaxis = "Actual", label="")
 	Plots.plot!(-5:5, -5:5, width=2, color="black", label="")
 end
+
+# ╔═╡ 59c4a287-753d-43d7-8995-6a4def819a89
+md"""
+The results, while not as accurate as the full NN, are at least an interpetable approximation of the model.
+
+We 
+"""
 
 # ╔═╡ 73f28ea1-11da-4020-b60b-d2ccb7e88b36
 options = SymbolicRegression.Options(
@@ -437,25 +464,28 @@ mean(((y_valid |> cpu) .- localglmnet(model, X_valid)).^2)
 # ╟─fbd109eb-2810-4c8f-9cee-e826de665f42
 # ╠═7ab66a7f-d593-4706-b0bf-dc8be4f30503
 # ╟─697279ec-e144-44da-87c6-2cffca56acc1
-# ╠═031ba09d-1c5c-44cf-bdbc-e21ee2dc0eb5
 # ╠═e4a90c03-be04-453b-b317-ae41d59a6612
 # ╟─b430a6a5-369b-4b8d-9994-19121cbedd51
 # ╠═06f69c1e-046d-4e2c-a0e0-159fd28f6af4
 # ╟─3ddc7775-77f3-47b1-a8d3-0dba2dd5e1d1
 # ╠═b58aa8a7-3053-4c1f-920f-5c1f72de4e2a
-# ╟─67d3165d-ac55-43ff-ae08-afcd6949318b
+# ╠═d664f697-0f94-4aa0-8595-36055b9381a0
+# ╠═67d3165d-ac55-43ff-ae08-afcd6949318b
 # ╠═b263ddaa-1442-446c-b275-58daebd051bf
 # ╟─7812ba51-d7eb-42b7-be5b-453859a2604c
 # ╠═633d4f7e-1786-42b3-8f70-4f2e827d8023
 # ╠═9fb27561-c74f-40aa-9a0f-29c651c6cb3f
 # ╟─bc36d6f7-4021-4137-9d80-eac0ba05fa8c
 # ╠═c86733fe-2f68-44b0-a7ad-6e34424d5177
-# ╠═6ad034a3-cd0f-4f4f-9861-d65f56d228e3
 # ╟─fc0d6dfe-8136-4fcb-8802-d0d32b309cdb
+# ╠═8712bce1-a627-40b5-9f75-6b5ccdfc847d
+# ╠═49267399-03c4-42b0-b9a2-f49abf1c0d69
 # ╠═492726a6-5108-4754-be7a-7bb146e911f9
 # ╠═a1308b55-46a4-41ee-90c4-b8ad91310058
+# ╟─7670f058-702d-4d6c-9d08-018f14b29f1c
 # ╠═c0e10a7f-44f5-4f95-a3b3-d04d34dee199
 # ╠═377551b4-0033-40ed-abb1-b9c8d86aaed9
+# ╠═59c4a287-753d-43d7-8995-6a4def819a89
 # ╠═73f28ea1-11da-4020-b60b-d2ccb7e88b36
 # ╠═139b2d3e-92e4-453a-bc90-1bb2a113016c
 # ╠═80b89d86-6058-48c5-95f4-0d6b1a495616
