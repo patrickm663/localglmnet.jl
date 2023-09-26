@@ -46,11 +46,13 @@ We take two approaches to better understand the NN:
 
 The results indicate the gradients are fairly similar to our true underlying model, and we can derive naive partial dependence plots to analyse the relatove impact of a feature.
 
-![grad1](isolated_pdp.png)
+![grad1](assets/isolated_pdp.png)
 
 Below is the gradient of $x_1$ and the gradient multiplied by the feature.
-![grad2](beta_1.png)
-![grad3](beta_x_1.png)
+
+![grad2](assets/beta_1.png)
+
+![grad3](assets/beta_x_1.png)
 
 As a rough measure of variable importance, we take the average absolute value of the features' gradient over a subset of data and plot the results. Larger values indicate a feature is (approximately) more impactful in the model's output:
 
@@ -64,7 +66,7 @@ As an alternative, we sum the isolated feature outputs and any bias term. In the
 
 The MSE from the approach above is 0.3001.
 
-![algn](actual_v_predicted_algn.png)
+![algn](assets/actual_v_predicted_algn.png)
 
 Finally, we apply symbolic regression to the fitted neural network which led to the following approximation (a slight adjustment to round the coefficients to make them more manageable -- further details in the notebook):
 
@@ -74,7 +76,7 @@ The MSE of this approximation is 0.0837.
 
 Altogether, the actual v. predicted for all models is:
 
-![avpa](actual_v_predicted_comb.png)
+![avpa](assets/actual_v_predicted_comb.png)
 
 ## Environment
 
