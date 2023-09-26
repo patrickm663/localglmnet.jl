@@ -24,5 +24,5 @@ docs/site/
 Manifest.toml
 
 # Avoid commiting SybmolicRegression.jl csv's
-*.csv.backup
+*.csv.bkup
 hall_of_fame*
