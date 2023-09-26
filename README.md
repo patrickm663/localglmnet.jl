@@ -48,3 +48,9 @@ The above analysis uses Julia 1.10.0-beta2 and a Pluto.jl notebook, which can be
 ## Acknowledgements
 
 The full print of Richman et al. is available at: https://arxiv.org/pdf/2107.11059.pdf
+
+## TODO
+
+- [ ] Update visualisations to include biplots and interactive 3D graphs and/or gifs.
+- [ ] Include a GLM benchmark
+- [ ] Fix the code to fully replicate the LocalGLMnet architecture per the paper
