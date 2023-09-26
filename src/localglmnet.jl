@@ -268,35 +268,27 @@ $$f(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}|x_3|\sin(2x_3) + \frac{
 
  $f(x)$ was generated with $x_1$ having a linear relation with the output. Judging by the plot, the slope is approximately $\frac{1}{2}$.
 
-We can also investigate the bias term -- if any.
+We can also investigate the bias term -- if any -- by passing a matrix of zeros through the NN.
 """
 
-# ╔═╡ b58aa8a7-3053-4c1f-920f-5c1f72de4e2a
-naive_pdp(n_feature(X, [0]))'
+# ╔═╡ 6ccdbe04-4e80-4dd2-92b0-2782bea598fb
+naive_pdp(n_feature(X_valid, [0]))'
 
-# ╔═╡ d664f697-0f94-4aa0-8595-36055b9381a0
-#Flux.jacobian(model |> cpu, n_feature(X_valid, [0])')
-
-# ╔═╡ 67d3165d-ac55-43ff-ae08-afcd6949318b
+# ╔═╡ f73fbb54-ea1e-4c28-9756-d82b7a4fd2ec
 md"""
-Even though the synthetic function did not have a bias term, the model assumed a small term of 0.00116.
+Even though the synthetic function did not have a bias term, the model assumed a small term.
 
-Looking at a feature like $x_7$ and $x_8$, we see that there is a small impact on outputs through their inclusion.
+Below are the outputs of passing a single feature through the NN:
 """
 
-# ╔═╡ b263ddaa-1442-446c-b275-58daebd051bf
+# ╔═╡ 477844af-932d-4a01-b286-4443f8cbc244
 begin
 	Plots.plot(xlabel = "x", ylabel = "f(X)")
 	Plots.scatter!(n_feature(X, [7])[:, 7], naive_pdp(n_feature(X, [7]))' |> cpu, label="x₇")
 	Plots.scatter!(n_feature(X, [8])[:, 8], naive_pdp(n_feature(X, [8]))'  |> cpu, label="x₈")
 end
 
-# ╔═╡ 7812ba51-d7eb-42b7-be5b-453859a2604c
-md"""
-We can also use this approach to construct plots to capture interdependency between features.
-"""
-
-# ╔═╡ 633d4f7e-1786-42b3-8f70-4f2e827d8023
+# ╔═╡ b109f56e-a084-47e9-b9ee-999d4382600f
 begin
 	l = @layout [a d; b c]
 	p1 = scatter3d(n_feature(X, [4])[:, 4], n_feature(X, [5])[:, 5], vec(naive_pdp(n_feature(X, [4,5]))' |> cpu), label="", xlabel="x₄", ylabel="x₅", zlabel="f(x)")
@@ -306,7 +298,7 @@ begin
 	Plots.plot(p1, p2, p3, p4, layout = l)
 end
 
-# ╔═╡ 9fb27561-c74f-40aa-9a0f-29c651c6cb3f
+# ╔═╡ d6361c38-556f-4025-a672-d92f9320cc49
 begin
 	l2 = @layout [a d; b c]
 	p5 = scatter3d(n_feature(X, [5])[:, 5], n_feature(X, [6])[:, 6], vec(naive_pdp(n_feature(X, [5,6]))' |> cpu), label="", xlabel="x₅", ylabel="x₆", zlabel="f(x)")
@@ -316,32 +308,112 @@ begin
 	Plots.plot(p5, p6, p7, p8, layout = l2)
 end
 
-# ╔═╡ bc36d6f7-4021-4137-9d80-eac0ba05fa8c
+# ╔═╡ d67941b7-93d8-4d7d-8eb8-b2c841e9a371
 md"""
-_I am not too sure what the significance of the interpretation below is, but if we take the output from the final hidden layer and plot it, we can see which 'channels' have more variety than others. For instance, channel 7 appears to mainly produce a constant output, whereas 1-4 produce a greater variety based on inputs._
+Further to the analysis, we can inspect the gradients by taking a Jacobian of our NN and true function across a single input.
 """
 
-# ╔═╡ c86733fe-2f68-44b0-a7ad-6e34424d5177
-Plots.heatmap(model[1:(end-1)](X_train')' |> cpu, title="Heatmap over the last hidden layer of the trained NN", xticks=1:8)
+# ╔═╡ 29c97b28-c661-46d2-8b75-89d6b960a937
+NN_grad = (Flux.jacobian(model, X_valid[1:1, :]' |> gpu) |> cpu)[1]
 
-# ╔═╡ fc0d6dfe-8136-4fcb-8802-d0d32b309cdb
+# ╔═╡ 10a0cd32-fbc5-4a72-8acb-a4eabdf1e037
+f_grad = (Flux.jacobian(f, X_valid[1:1, :] |> gpu) |> cpu)[1]
+
+# ╔═╡ 886d3fbf-566f-4906-8455-1c7fbe873559
+loss(NN_grad, f_grad)
+
+# ╔═╡ dacd1d76-d7ee-40a9-979a-3fc68ec2b1bd
 md"""
-### LocalGLMnet
+We can repeat this process to generate a function that computes the gradient for each feature, given some input. We denote these gradients as $\beta(𝐱)$.
 """
 
-# ╔═╡ 8712bce1-a627-40b5-9f75-6b5ccdfc847d
+# ╔═╡ b75dacd2-a431-47b4-a5f8-63468aa8cb11
+function β(X, m)::Matrix{Float32}
+	n::Int64, M::Int64 = size(X)
+	grads_::Matrix{Float32} = Matrix{Float32}(undef, n, M)
+	for i ∈ 1:n
+		grads_[i, :] = ((Flux.jacobian(m, X[i:i, :]') |> gpu)[1] |> cpu)
+	end
+	return grads_
+end
+
+# ╔═╡ 341e3df1-09e9-4877-a541-caf611e5a335
+grads_ = β(X_valid, model)
+
+# ╔═╡ c45cd285-a3a1-45cb-b31c-4a72ffbf0e85
 md"""
-A LocalGLMnet model is defined as a skip-connection model, where an additive decomposition of the model is created as follows:
-
-$$g(𝒙) = \beta_0 + \sum_{i}\beta(x_i)x_i$$
-
-
+With the gradients on hand, we can inspect them to identify the estimated change in output, given a change in a feature.
 """
 
-# ╔═╡ 49267399-03c4-42b0-b9a2-f49abf1c0d69
+# ╔═╡ 18c48886-a974-4804-867f-43c87fa0fc3f
+Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1], xlabel="x₁", ylabel="β(x₁)", label="")
 
+# ╔═╡ cc965139-7117-41c9-b5b6-1113c340c478
+(mean(grads_[:,1]), std(grads_[:,1]))
 
-# ╔═╡ 492726a6-5108-4754-be7a-7bb146e911f9
+# ╔═╡ 1bb9db2c-b451-4018-8635-49459e7eb423
+md"""
+The plot of $x_1$ above suggests, for the most part, a consistent change in output of 0.5. This matches the gradient of the first term in our actual function.
+
+If we take this further and get the mean of the absolute values of the gradients, we should have a rough notion of feature importance (per Richman et al.):
+
+$$VI = \frac{1}{n}\sum_{i} \big|\beta(x_i)\big|$$
+"""
+
+# ╔═╡ dabf6494-0a89-4cb2-9cbe-445cb49f52fd
+vi(grad) = mean(abs.(grad); dims=1)
+
+# ╔═╡ 850d7baa-f6fa-4236-bb82-ecffae0e24ea
+Plots.bar(vi(grads_)', xticks=1:8, xlabel="xᵢ", ylabel="Average Absolute Gradient", label="", title="Gradient-based Feature Importance")
+
+# ╔═╡ af323502-02b2-4233-a99e-26007944a778
+md"""
+Based on the graph above, features $x_7$ and $x_8$ have very little impact, which matches the how the synthetic data was constructed.
+
+Recall a GLM (or single layer perception) has a constant gradient $\beta_i$ for feature $x_i$: we can apply this notion of gradients representing GLM coefficients to the vectors of gradients calculated above (Richman et al.):
+
+$$\hat{y} = \beta_0 + \sum_{i}\beta(x_i)x_i$$
+
+Below is the plot for the term $\beta(x_1)x_1$
+"""
+
+# ╔═╡ d9ceaee1-cb49-47a5-b531-d6b73ec04f22
+Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1] .* (X_valid[:,1] |> cpu), xlabel="x₁", ylabel="β(x₁)x₁", label="")
+
+# ╔═╡ e9e145b4-28b1-4532-bcb7-8f4d6ac0120d
+md"""
+If we repeat the process above, we can add each of our terms to produce an estimate for the NN.
+"""
+
+# ╔═╡ 2ffa4bd6-a644-4b6a-94da-c189846ed8cc
+function localglmnet(x, grad, intercept)
+	n, m = size(x)
+	output = ones(n) .* intercept
+	for i ∈ 1:m
+		output = output + (grad[:,i] .* (x[:,i] |> cpu))
+	end
+	return output
+end
+
+# ╔═╡ 11e76923-2025-416b-b274-4ec040e4d9bc
+β₀ = (model(n_feature(X_valid, [0])' |> gpu) |> cpu)[1]
+
+# ╔═╡ 68a41d51-7e39-4d9b-9311-ea1971c8851f
+md"""
+The above error is high, and the plot below indicates there may be a misspecification -- **PR's welcome!**
+"""
+
+# ╔═╡ 61eb14a9-f03c-4dca-8e0a-ccdf5b9deb50
+md"""
+_**The above approximation is not very strong. It is very likely the author has misinterpreted part of the original paper's architecture.**_
+"""
+
+# ╔═╡ 2f297705-5619-4b77-b42a-e05bd2a87812
+md"""
+The gradients provided a good way to understand the output of the NN better. We can however also use the outputs generated through our single feature passthroughs previously and construct an additive model in that way.
+"""
+
+# ╔═╡ 63798e54-6173-480d-a57a-253a56d2451f
 function localglmnet(m, X_::Union{CuArray, Matrix})::Matrix
 	ret::Matrix = deepcopy(X_) |> cpu
 	weights::Vector, _ = Flux.destructure(m) |> cpu
@@ -353,8 +425,20 @@ function localglmnet(m, X_::Union{CuArray, Matrix})::Matrix
 	return output
 end
 
+# ╔═╡ 66526a5d-6e6d-4390-ba8d-f460e0f53ecf
+y_pred_lgn = localglmnet(X_valid, grads_, β₀)
+
+# ╔═╡ d3947034-3bf9-4eb3-8c01-ac063cfd66c0
+loss(f(X_valid |> cpu), y_pred_lgn)
+
+# ╔═╡ d4a81f88-a97a-4444-a587-31f7c75433dd
+begin
+	Plots.scatter(y_valid |> cpu, y_pred_lgn, xlim = (-8, 8), ylim = (-8, 8), yaxis = "LocalGLMnet Predicted", xaxis = "Actual", label="")
+	Plots.plot!(-8:8, -8:8, width=2, color="black", label="")
+end
+
 # ╔═╡ a1308b55-46a4-41ee-90c4-b8ad91310058
-y_lgn = localglmnet(model, X_train)
+y_alt_lgn_pred = localglmnet(model, X_valid)
 
 # ╔═╡ 7670f058-702d-4d6c-9d08-018f14b29f1c
 md"""
@@ -362,65 +446,108 @@ We compute the MSE for comparitive purposes, and produce an Actual v. Predicted 
 """
 
 # ╔═╡ c0e10a7f-44f5-4f95-a3b3-d04d34dee199
-loss(y_train |> cpu, y_lgn)
+loss(y_valid |> cpu, y_alt_lgn_pred)
 
 # ╔═╡ 377551b4-0033-40ed-abb1-b9c8d86aaed9
 begin
-	Plots.scatter(y_train |> cpu, y_lgn, xlim = (-5, 5), ylim = (-5, 5), yaxis = "LocalGLMNet Prediction", xaxis = "Actual", label="")
+	Plots.scatter(y_valid |> cpu, y_alt_lgn_pred, xlim = (-5, 5), ylim = (-5, 5), yaxis = "Alternative LocalGLMNet Prediction", xaxis = "Actual", label="")
 	Plots.plot!(-5:5, -5:5, width=2, color="black", label="")
 end
 
 # ╔═╡ 59c4a287-753d-43d7-8995-6a4def819a89
 md"""
-The results, while not as accurate as the full NN, are at least an interpetable approximation of the model.
+The results, while not as accurate as the full NN, are reasonable enough.
 
-We 
+As a final exercise, we can produce an entirely analytic model via symbolic regression.
+
+We begin by defining a set of permissible operators below. Note that for a quicker runtime when experimenting, we could let it be stochastic and use multi-threading. However, for reproducability, we need to use serial mode.
 """
 
 # ╔═╡ 73f28ea1-11da-4020-b60b-d2ccb7e88b36
 options = SymbolicRegression.Options(
     binary_operators=[+, *, /, -],
     unary_operators=[sin, exp],
-    populations=20
+    populations=50,
+	batching=true,
+	deterministic=true
 )
 
 # ╔═╡ 139b2d3e-92e4-453a-bc90-1bb2a113016c
-#hall_of_fame = equation_search(
-    (X_train' |> cpu), vec(model(X_train')' |> cpu), niterations=40, options=options,
-    parallelism=:multithreading
-)
+eq = equation_search(
+    (X_valid' |> cpu), vec(model(X_valid')' |> cpu), niterations=40, options=options,
+    parallelism=:serial
+);
+
+# ╔═╡ 07f45bcd-48ec-4fdc-a224-49e81a8435f2
+md"""
+We then extract a set of analytical approximations in order of complexity and accuracy.
+"""
 
 # ╔═╡ 80b89d86-6058-48c5-95f4-0d6b1a495616
-dominating = calculate_pareto_frontier(hall_of_fame)
+top_eqs = calculate_pareto_frontier(eq)
+
+# ╔═╡ bb84f738-cce7-4674-8968-dc2eee8e8788
+md"""
+Running a loop over it creates an easier to work with data structure.
+"""
 
 # ╔═╡ c94b572d-123f-45f2-8fd3-00db8df3e2ee
-trees = [member.tree for member in dominating]
+trees = [member.tree for member in top_eqs]
+
+# ╔═╡ 7f054156-a992-4cb0-9f26-bc19c878d4eb
+md"""
+We can then index `trees` based on whether we want a simple (index `1`) or complex (index `end`) expression.
+
+Based on the equation selected and some input data, we can produce output, as well as a $\LaTeX$ expression.
+"""
 
 # ╔═╡ ee4b9e54-bd46-41ff-821b-5cd66deddb9d
-y_sr, _ = eval_tree_array(trees[end], X_valid' |> cpu, options)
+y_sr, _ = eval_tree_array(trees[end-1], X_valid' |> cpu, options)
 
 # ╔═╡ 01114b16-0885-422b-9272-1363b42f64e4
-latexify(string(trees[end]))
+latexify(string(trees[end-1]))
+
+# ╔═╡ a3eb4abf-e1d0-4833-8bed-0cd85b425b19
+md"""
+The above equation can be simplified to get:
+
+$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}\sin(2x_3) +\frac{1}{2}x_4 x_5$$
+
+Compared to the original equation:
+
+$$f(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}|x_3|\sin(2x_3) + \frac{1}{2}x_4 x_5 + \frac{1}{8}x_{5}^2x_{6}$$
+
+This suggests the symbolic regression could not pick up the $|x_3|$ term and the $\frac{1}{8}x_{5}^2x_{6}$ term (the latter of which is reasonably small).
+"""
+
+# ╔═╡ d5ccb74e-6259-41da-89dd-d5bb43f0566a
+g_SR(x) = 0.5 .* x[:, 1] .- 0.25 .* x[:, 2] .^2 + 0.5 .* sin.(2 .* x[:, 3]) .+ 0.5 .* x[:, 4] .* x[:, 5]
 
 # ╔═╡ e0c6917f-9f27-4cbd-8514-f42211d2ce2a
 begin
-	scatter(y_valid |> cpu, y_sr, xlim = (-5, 5), ylim = (-5, 5), yaxis = "Symbolic Prediction", xaxis = "Actual", label="SR", markeralpha=.4)
-	scatter!(y_valid |> cpu, (model(X_valid')' |> cpu), xlim = (-5, 5), ylim = (-5, 5), label="NN", markeralpha=.4)
-	scatter!(y_valid |> cpu, localglmnet(model, X_valid), xlim = (-5, 5), ylim = (-5, 5), label="LGN", markeralpha=.4)
-	plot!(-5:5, -5:5, width=2, color="black", label="")
+	Plots.scatter(y_valid |> cpu, y_sr, xlim = (-5, 5), ylim = (-5, 5), yaxis = "Prediction", xaxis = "Actual", label="SR", markeralpha=.4)
+	Plots.scatter!(y_valid |> cpu, (model(X_valid')' |> cpu), xlim = (-5, 5), ylim = (-5, 5), label="NN", markeralpha=.4)
+	Plots.scatter!(y_valid |> cpu, g_SR(X_valid |> cpu), xlim = (-5, 5), ylim = (-5, 5), label="SR Simplified", markeralpha=.4)
+	Plots.scatter!(y_valid |> cpu, localglmnet(model, X_valid |> cpu), xlim = (-5, 5), ylim = (-5, 5), label="Alt. LocalGLMnet", markeralpha=.4)
+	Plots.plot!(-5:5, -5:5, width=2, color="black", label="")
 end
 
+# ╔═╡ 19f072d0-e99e-49d1-aaf7-2281558c50fc
+md"""
+For completeness, below is the MSE of the symbolic approximation vs NN and the alternative LocalGLMnet.
+"""
+
 # ╔═╡ cdb815d9-e76b-40d1-b95e-0b934e7688f5
-mean(((y_valid |> cpu) .- y_sr).^2)
-
-# ╔═╡ b9282db5-92e5-403d-85ad-650cd5f95126
-mean(((y_valid |> cpu) .- (model(X_valid')' |> cpu)).^2)
-
-# ╔═╡ d57c7b5a-f795-43bd-84b3-9d48a96f905c
-mean(((y_valid |> cpu) .- localglmnet(model, X_valid)).^2)
+loss((y_valid |> cpu), y_sr)
 
 # ╔═╡ 222665da-c1f3-4f9f-b281-7d0bcd6ce0c4
+loss((y_valid |> cpu), g_SR(X_valid |> cpu))
 
+# ╔═╡ b9282db5-92e5-403d-85ad-650cd5f95126
+loss((y_valid |> cpu), (model(X_valid')' |> cpu))
+
+# ╔═╡ d57c7b5a-f795-43bd-84b3-9d48a96f905c
+loss((y_valid |> cpu), localglmnet(model, X_valid))
 
 # ╔═╡ Cell order:
 # ╟─d2288bce-fc0f-486d-b315-72b90eeb28bc
@@ -468,32 +595,55 @@ mean(((y_valid |> cpu) .- localglmnet(model, X_valid)).^2)
 # ╟─b430a6a5-369b-4b8d-9994-19121cbedd51
 # ╠═06f69c1e-046d-4e2c-a0e0-159fd28f6af4
 # ╟─3ddc7775-77f3-47b1-a8d3-0dba2dd5e1d1
-# ╠═b58aa8a7-3053-4c1f-920f-5c1f72de4e2a
-# ╠═d664f697-0f94-4aa0-8595-36055b9381a0
-# ╠═67d3165d-ac55-43ff-ae08-afcd6949318b
-# ╠═b263ddaa-1442-446c-b275-58daebd051bf
-# ╟─7812ba51-d7eb-42b7-be5b-453859a2604c
-# ╠═633d4f7e-1786-42b3-8f70-4f2e827d8023
-# ╠═9fb27561-c74f-40aa-9a0f-29c651c6cb3f
-# ╟─bc36d6f7-4021-4137-9d80-eac0ba05fa8c
-# ╠═c86733fe-2f68-44b0-a7ad-6e34424d5177
-# ╟─fc0d6dfe-8136-4fcb-8802-d0d32b309cdb
-# ╠═8712bce1-a627-40b5-9f75-6b5ccdfc847d
-# ╠═49267399-03c4-42b0-b9a2-f49abf1c0d69
-# ╠═492726a6-5108-4754-be7a-7bb146e911f9
+# ╠═6ccdbe04-4e80-4dd2-92b0-2782bea598fb
+# ╟─f73fbb54-ea1e-4c28-9756-d82b7a4fd2ec
+# ╠═477844af-932d-4a01-b286-4443f8cbc244
+# ╠═b109f56e-a084-47e9-b9ee-999d4382600f
+# ╠═d6361c38-556f-4025-a672-d92f9320cc49
+# ╟─d67941b7-93d8-4d7d-8eb8-b2c841e9a371
+# ╠═29c97b28-c661-46d2-8b75-89d6b960a937
+# ╠═10a0cd32-fbc5-4a72-8acb-a4eabdf1e037
+# ╠═886d3fbf-566f-4906-8455-1c7fbe873559
+# ╟─dacd1d76-d7ee-40a9-979a-3fc68ec2b1bd
+# ╠═b75dacd2-a431-47b4-a5f8-63468aa8cb11
+# ╠═341e3df1-09e9-4877-a541-caf611e5a335
+# ╟─c45cd285-a3a1-45cb-b31c-4a72ffbf0e85
+# ╠═18c48886-a974-4804-867f-43c87fa0fc3f
+# ╠═cc965139-7117-41c9-b5b6-1113c340c478
+# ╟─1bb9db2c-b451-4018-8635-49459e7eb423
+# ╠═dabf6494-0a89-4cb2-9cbe-445cb49f52fd
+# ╠═850d7baa-f6fa-4236-bb82-ecffae0e24ea
+# ╟─af323502-02b2-4233-a99e-26007944a778
+# ╠═d9ceaee1-cb49-47a5-b531-d6b73ec04f22
+# ╟─e9e145b4-28b1-4532-bcb7-8f4d6ac0120d
+# ╠═2ffa4bd6-a644-4b6a-94da-c189846ed8cc
+# ╠═11e76923-2025-416b-b274-4ec040e4d9bc
+# ╠═66526a5d-6e6d-4390-ba8d-f460e0f53ecf
+# ╠═d3947034-3bf9-4eb3-8c01-ac063cfd66c0
+# ╟─68a41d51-7e39-4d9b-9311-ea1971c8851f
+# ╠═d4a81f88-a97a-4444-a587-31f7c75433dd
+# ╟─61eb14a9-f03c-4dca-8e0a-ccdf5b9deb50
+# ╟─2f297705-5619-4b77-b42a-e05bd2a87812
+# ╠═63798e54-6173-480d-a57a-253a56d2451f
 # ╠═a1308b55-46a4-41ee-90c4-b8ad91310058
 # ╟─7670f058-702d-4d6c-9d08-018f14b29f1c
 # ╠═c0e10a7f-44f5-4f95-a3b3-d04d34dee199
 # ╠═377551b4-0033-40ed-abb1-b9c8d86aaed9
-# ╠═59c4a287-753d-43d7-8995-6a4def819a89
+# ╟─59c4a287-753d-43d7-8995-6a4def819a89
 # ╠═73f28ea1-11da-4020-b60b-d2ccb7e88b36
 # ╠═139b2d3e-92e4-453a-bc90-1bb2a113016c
+# ╟─07f45bcd-48ec-4fdc-a224-49e81a8435f2
 # ╠═80b89d86-6058-48c5-95f4-0d6b1a495616
+# ╟─bb84f738-cce7-4674-8968-dc2eee8e8788
 # ╠═c94b572d-123f-45f2-8fd3-00db8df3e2ee
+# ╟─7f054156-a992-4cb0-9f26-bc19c878d4eb
 # ╠═ee4b9e54-bd46-41ff-821b-5cd66deddb9d
 # ╠═01114b16-0885-422b-9272-1363b42f64e4
+# ╟─a3eb4abf-e1d0-4833-8bed-0cd85b425b19
+# ╠═d5ccb74e-6259-41da-89dd-d5bb43f0566a
 # ╠═e0c6917f-9f27-4cbd-8514-f42211d2ce2a
+# ╟─19f072d0-e99e-49d1-aaf7-2281558c50fc
 # ╠═cdb815d9-e76b-40d1-b95e-0b934e7688f5
+# ╠═222665da-c1f3-4f9f-b281-7d0bcd6ce0c4
 # ╠═b9282db5-92e5-403d-85ad-650cd5f95126
 # ╠═d57c7b5a-f795-43bd-84b3-9d48a96f905c
-# ╠═222665da-c1f3-4f9f-b281-7d0bcd6ce0c4
