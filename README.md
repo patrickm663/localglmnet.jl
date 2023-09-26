@@ -1,4 +1,5 @@
-# localglmnet.jl
+# Interpreting Neural Networks
+
 This is a WIP implementation of some of the work found in Richman &amp; Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf)), using Julia's Flux.jl + CUDA.jl.
 
 While this does not aim to fully replicate the results of the paper, it follows some of its principles and shows some methodology for interpreting neural nets.
@@ -19,7 +20,7 @@ We train a feed-forward neural network to approximate the above equation. 75% of
 
 We then construct naive partial dependence plots by isolating the effect a single feature $x_i$ has on the output by passing only feature $x_i$ through the NN -- zeros everywhere else. This gives us a rough approximation for the impact changes in feature $x_i$ will have on the output.
 
-Per Richman et al., we investigate the gradients by taking a Jacobian over a set of observations. The gradients are compared to the gradients of the true function and plotted to abalyse their movements wrt changes in inout. The average absolute value of each feature can be used to give us a rough feature importance plot.
+Per Richman et al., we investigate the gradients by taking a Jacobian over a set of observations. The gradients are compared to the gradients of the true function and plotted to analyse their movements wrt changes in input. The average absolute value of each feature can be used to give us a rough feature importance plot.
 
 Following this, we construct a LocalGLMnet model by taking the dot product of the gradient and the feature and summing this over the whole feature set, plus any bias term. 
 
