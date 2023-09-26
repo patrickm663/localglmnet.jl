@@ -27,7 +27,7 @@ Finally, we find an analytical approximation for the NN using `SymbolicRegressio
 
 The MSE over 7 500 epochs:
 
-TO ADD
+!(mse)["assets/loss_mse.png"]
 
 The MSE for the training, validation, and testing sets:
 
