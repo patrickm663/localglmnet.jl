@@ -1,4 +1,4 @@
-# Interpreting Neural Networks
+# Interpreting Neural Networks using LocalGLMnet
 
 This is a WIP implementation of some of the work found in Richman &amp; Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf)), using Julia's Flux.jl + CUDA.jl.
 
@@ -26,10 +26,10 @@ Following this, we construct a LocalGLMnet model by taking the dot product of th
 
 As an alternative, we make a different form of a LocalGLMnet by instead summing the outputs from the isolated outputs to form an additive decomposition of the NN -- including any bias term.
 
-Finally, we find an analytical approximation for the NN using `SymbolicRegression.jl` and compare it to the oroginal function.
+Finally, we find an analytical approximation for the NN using `SymbolicRegression.jl` and compare it to the original function.
 
 ## Results
-**_An HTML of the full investigation can be found in the `docs/` folder_**.
+**_An HTML of the full investigation is available here: https://patrickm663.github.io/localglmnet.jl/_**.
 
 When trained over 7 500 epochs, the model seemed to avoid overfitting by maintaining high accuracy in the validation set:
 
@@ -49,7 +49,7 @@ We take two approaches to better understand the NN:
 - investigate output when isolating a particular feature and passing it through the NN -- all else set to zero
 - find the Jacobian using some input data and investigate the gradients per feature
 
-The results indicate the gradients are fairly similar to our true underlying model, and we can derive naive partial dependence plots to analyse the relatove impact of a feature.
+The results indicate the gradients are fairly similar to our true underlying model, and we can derive naive partial dependence plots to analyse the relative impact of a feature.
 
 ![grad1](assets/isolated_pdp.png)
 
