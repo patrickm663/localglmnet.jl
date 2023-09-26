@@ -115,9 +115,7 @@ md"""
 
 # ╔═╡ 3a6268d6-10ac-4c17-9987-391d0a3a1b3d
 md"""
-We set-up a 3-layer feedforward network ($32 → 64 → 8$) to perform regression. Important to note is that we intentionally set the last hidden layer to comprise of 8 neurons (+ bias) -- the size of our paramter space!
-
-Per Richman _et al._, this can lead to a LocalGLMnet by establishing a _skip connection_ between the parameter space and the last hidden layer, setting us up to have a GLM-style neural network. 
+We set-up a 3-layer feedforward network ($32 → 64 → 8$) to perform regression.
 """
 
 # ╔═╡ 9aabe634-0bad-4529-bb8d-760b91d891e9
@@ -130,7 +128,7 @@ model = Chain(
 
 # ╔═╡ 3a941ea0-524a-40f6-a92c-4a8de4918d3f
 md"""
-Our model uses the default implementation of Adam over 5 000 epochs. The mean squared error (MSE) is used as the loss function.
+Our model uses the default implementation of Adam over 7 500 epochs. The mean squared error (MSE) is used as the loss function.
 """
 
 # ╔═╡ 85381d05-fd50-43a4-a462-e73184c448d5
@@ -163,7 +161,7 @@ end
 md"""
 Based on the plot of the losses below, the neural network has performed very well on both training and validation splits, having reached stability from about 3 000 epochs, suggesting early stopping may have been used.
 
-The training time however is not too significant, just under 1 minute on this Pop!_OS MSI laptop (11th Gen i5, Nvidia GTX 1650, 16GB RAM).
+The training time however is not too significant, at around 1 minute 20 seconds on this Pop!_OS MSI laptop (11th Gen i5, Nvidia GTX 1650, 16GB RAM).
 """
 
 # ╔═╡ e6b56c4c-5197-40ba-97e7-75a0b52dda6d
@@ -194,7 +192,7 @@ y_pred = model(X_test')
 
 # ╔═╡ 6e0a0873-da7f-459b-9228-429c65afe8c1
 md"""
-The Actual v. Predicted plot below shows the majority of the data points lie along the diagonla, indicating a good fit overall on unseen data.
+The Actual v. Predicted plot below shows the majority of the data points lie along the diagonal, indicating a good fit overall on unseen data.
 """
 
 # ╔═╡ 4114157c-cc23-4a1c-9aaf-bb6abab4bd1a
@@ -310,7 +308,7 @@ end
 
 # ╔═╡ d67941b7-93d8-4d7d-8eb8-b2c841e9a371
 md"""
-Further to the analysis, we can inspect the gradients by taking a Jacobian of our NN and true function across a single input.
+Further to the analysis, we can inspect the gradients by taking a Jacobian of our NN and true function across a single input, and calculating the MSE between them.
 """
 
 # ╔═╡ 29c97b28-c661-46d2-8b75-89d6b960a937
@@ -395,6 +393,11 @@ function localglmnet(x, grad, intercept)
 	return output
 end
 
+# ╔═╡ b5abe10d-1b59-4582-9057-47209dd56c49
+md"""
+We obtain the intercept for the model showcased previously.
+"""
+
 # ╔═╡ 11e76923-2025-416b-b274-4ec040e4d9bc
 β₀ = (model(n_feature(X_valid, [0])' |> gpu) |> cpu)[1]
 
@@ -466,7 +469,7 @@ We begin by defining a set of permissible operators below. Note that for a quick
 # ╔═╡ 73f28ea1-11da-4020-b60b-d2ccb7e88b36
 options = SymbolicRegression.Options(
     binary_operators=[+, *, /, -],
-    unary_operators=[sin, exp],
+    unary_operators=[sin, exp, abs],
     populations=50,
 	batching=true,
 	deterministic=true
@@ -498,7 +501,7 @@ trees = [member.tree for member in top_eqs]
 md"""
 We can then index `trees` based on whether we want a simple (index `1`) or complex (index `end`) expression.
 
-Based on the equation selected and some input data, we can produce output, as well as a $\LaTeX$ expression.
+Based on the equation selected and some input data, we can produce output, as well as a $\LaTeX$ expression (users may tweak the equation used to balance accuracy with interpretability).
 """
 
 # ╔═╡ ee4b9e54-bd46-41ff-821b-5cd66deddb9d
@@ -511,17 +514,17 @@ latexify(string(trees[end-1]))
 md"""
 The above equation can be simplified to get:
 
-$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}\sin(2x_3) +\frac{1}{2}x_4 x_5$$
+$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}|x_3|\sin(2x_3) +\frac{1}{2}x_4 x_5$$
 
 Compared to the original equation:
 
 $$f(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}|x_3|\sin(2x_3) + \frac{1}{2}x_4 x_5 + \frac{1}{8}x_{5}^2x_{6}$$
 
-This suggests the symbolic regression could not pick up the $|x_3|$ term and the $\frac{1}{8}x_{5}^2x_{6}$ term (the latter of which is reasonably small).
+This suggests the symbolic regression could not pick up the $x_2^2$ term correctly, and the $\frac{1}{8}x_{5}^2x_{6}$ term was excluded (the latter of which is reasonably small).
 """
 
 # ╔═╡ d5ccb74e-6259-41da-89dd-d5bb43f0566a
-g_SR(x) = 0.5 .* x[:, 1] .- 0.25 .* x[:, 2] .^2 + 0.5 .* sin.(2 .* x[:, 3]) .+ 0.5 .* x[:, 4] .* x[:, 5]
+g_SR(x) = 0.5 .* x[:, 1] .- 0.5 .* abs.(x[:, 2]) + 0.5 .* abs.(x[:, 3]) .* sin.(2 .* x[:, 3]) .+ 0.5 .* x[:, 4] .* x[:, 5]
 
 # ╔═╡ e0c6917f-9f27-4cbd-8514-f42211d2ce2a
 begin
@@ -538,16 +541,16 @@ For completeness, below is the MSE of the symbolic approximation vs NN and the a
 """
 
 # ╔═╡ cdb815d9-e76b-40d1-b95e-0b934e7688f5
-loss((y_valid |> cpu), y_sr)
+string("Symbolic Approximation: ", loss((y_valid |> cpu), y_sr))
 
 # ╔═╡ 222665da-c1f3-4f9f-b281-7d0bcd6ce0c4
-loss((y_valid |> cpu), g_SR(X_valid |> cpu))
+string("Simplified Symbolic Approximation: ", loss((y_valid |> cpu), g_SR(X_valid |> cpu)))
 
 # ╔═╡ b9282db5-92e5-403d-85ad-650cd5f95126
-loss((y_valid |> cpu), (model(X_valid')' |> cpu))
+string("Neural Network Approximation: ", loss((y_valid |> cpu), (model(X_valid')' |> cpu)))
 
 # ╔═╡ d57c7b5a-f795-43bd-84b3-9d48a96f905c
-loss((y_valid |> cpu), localglmnet(model, X_valid))
+string("Alternative LocalGLMnet Approximation: ", loss((y_valid |> cpu), localglmnet(model, X_valid)))
 
 # ╔═╡ Cell order:
 # ╟─d2288bce-fc0f-486d-b315-72b90eeb28bc
@@ -617,6 +620,7 @@ loss((y_valid |> cpu), localglmnet(model, X_valid))
 # ╠═d9ceaee1-cb49-47a5-b531-d6b73ec04f22
 # ╟─e9e145b4-28b1-4532-bcb7-8f4d6ac0120d
 # ╠═2ffa4bd6-a644-4b6a-94da-c189846ed8cc
+# ╟─b5abe10d-1b59-4582-9057-47209dd56c49
 # ╠═11e76923-2025-416b-b274-4ec040e4d9bc
 # ╠═66526a5d-6e6d-4390-ba8d-f460e0f53ecf
 # ╠═d3947034-3bf9-4eb3-8c01-ac063cfd66c0
