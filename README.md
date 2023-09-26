@@ -52,7 +52,7 @@ Below is the gradient of $x_1$ and the gradient multiplied by the feature.
 
 ![grad2](assets/beta_1.png)
 
-![grad3](assets/beta_x_1.png)
+![grad3](assets/beta_1_x_1.png)
 
 As a rough measure of variable importance, we take the average absolute value of the features' gradient over a subset of data and plot the results. Larger values indicate a feature is (approximately) more impactful in the model's output:
 
