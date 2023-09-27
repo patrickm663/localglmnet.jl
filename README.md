@@ -1,6 +1,6 @@
 # Interpreting Neural Networks using LocalGLMnet
 
-This is a WIP implementation of some of the work found in Richman &amp; Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf)), using Julia's Flux.jl + CUDA.jl.
+This is a WIP implementation of some of the work found in _LocalGLMnet: Interpretable deep learning for tabular data_ by Richman &amp; Wüthrich ([2021](https://arxiv.org/pdf/2107.11059.pdf)), using Julia's Flux.jl + CUDA.jl.
 
 While this does not aim to fully replicate the results of the paper, it follows some of its principles and shows some methodology for interpreting neural nets.
 
