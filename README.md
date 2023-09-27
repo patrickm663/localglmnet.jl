@@ -24,7 +24,7 @@ Per Richman et al., we investigate the gradients by taking a Jacobian over a set
 
 Following this, we construct a LocalGLMnet model by taking the dot product of the gradient and the feature and summing this over the whole feature set, plus any bias term. 
 
-As an alternative, we make a different form of a LocalGLMnet by instead summing the outputs from the isolated outputs to form an additive decomposition of the NN -- including any bias term.
+As an alternative, we make a different form of a LocalGLMnet by instead summing the outputs from the isolated inputs to form an additive decomposition of the NN -- including any bias term.
 
 Finally, we find an analytical approximation for the NN using `SymbolicRegression.jl` and compare it to the original function.
 
