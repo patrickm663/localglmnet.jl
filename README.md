@@ -31,15 +31,17 @@ Finally, we find an analytical approximation for the NN using `SymbolicRegressio
 ## Results
 **_An HTML of the full investigation is available here: https://patrickm663.github.io/localglmnet.jl/_**.
 
+The neural network used comprises of 3 layers ($32 → 64 → 8$), with $\tanh$ activation functions. The final activation function is just the identify function, since our output is defined over the set of Reals.
+
 When trained over 7 500 epochs, the model seemed to avoid overfitting by maintaining high accuracy in the validation set:
 
 ![mse](assets/mse_loss.png)
 
 The MSE is as follows:
 
-- **Train**: 0.000424
-- **Valid**: 0.000727
-- **Test**: 0.000849
+- **Train**: 0.000444
+- **Valid**: 0.000575
+- **Test**: 0.000752
 
 The actual v predicted plot over the Test set shows very good results across the entire range:
 
@@ -53,11 +55,13 @@ The results indicate the gradients are fairly similar to our true underlying mod
 
 ![grad1](assets/isolated_pdp.png)
 
-Below is the gradient of $x_1$ and the gradient multiplied by the feature.
+It is very interesting to note that moving from $\tanh$ to ReLU activation functions creates jaggered naive PDPs, whereas the above are smooth and output is more predictable.
 
-![grad2](assets/beta_1.png)
+Below is the gradient of $x_i$ (denoted as $\beta(x_i)$) and the gradient multiplied by the feature (denoted as $\beta(x_i)x_i$).
 
-![grad3](assets/beta_1_x_1.png)
+![grad2](assets/beta_x.png)
+
+![grad3](assets/beta_x_x_i.png)
 
 As a rough measure of variable importance, we take the average absolute value of the features' gradient over a subset of data and plot the results. Larger values indicate a feature is (approximately) more impactful in the model's output:
 
@@ -69,15 +73,15 @@ Per Richman et al., we take the dot product of the gradient of the feature and t
 
 As an alternative, we sum the isolated feature outputs and any bias term. In the future, this could be made more robust by applying a weighting to the results and including interaction terms. Furthermore, analytic approximations for each of the terms could perhaps be derived -- the same applies to the gradients refered to earlier.
 
-The MSE from the approach above is 0.3001.
+The MSE from the approach above is 0.2918.
 
 ![algn](assets/actual_v_predicted_algn.png)
 
 Finally, we apply symbolic regression to the fitted neural network which led to the following approximation (a slight adjustment to round the coefficients to make them more manageable -- further details in the notebook):
 
-$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}|x_3|\sin(2x_3) +\frac{1}{2}x_4 x_5$$
+$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}\sin(2x_3 + 0.3) +\frac{1}{2}x_4 x_5$$
 
-The MSE of this approximation is 0.0837.
+The MSE of this approximation is 0.1209.
 
 Altogether, the actual v. predicted for all models is:
 
