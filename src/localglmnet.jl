@@ -79,7 +79,7 @@ Our data input $X$ is an $8×10,000$ matrix of standard Normally distributed var
 ]
 
 # ╔═╡ 1a2a0752-75e8-4703-b832-e95eb6e3bc6b
-X = rand(MvNormal(zeros(8), Σ), 100_000)' |> f32 |> gpu
+X = rand(rng, MvNormal(zeros(8), Σ), 100_000)' |> f32 |> gpu
 
 # ╔═╡ 1e6a99b9-b1a8-4459-9f70-67961271e4c8
 f(x) = 0.5 .* x[:, 1] .- 0.25 .* x[:, 2] .^2 + 0.5 .* abs.(x[:, 3]) .* sin.(2 .* x[:, 3]) .+ 0.5 .* x[:, 4] .* x[:, 5] .+ 0.125 .* x[:, 6] .* x[:, 5] .^ 2
@@ -182,7 +182,7 @@ Per Richman _et al._, we create a new sample of 100 000 data points and investig
 """
 
 # ╔═╡ 0a9e7b6a-0f16-4ac8-bb99-bd729a719e13
-X_test = rand(MvNormal(zeros(8), Σ), 100_000)' |> f32 |> gpu
+X_test = rand(rng, MvNormal(zeros(8), Σ), 100_000)' |> f32 |> gpu
 
 # ╔═╡ 08fd28d4-8376-4031-80be-84f88055f11c
 y_test = f(X_test)
@@ -239,10 +239,15 @@ We can then pass our data through the model to generate output, subtracting any 
 """
 
 # ╔═╡ e4a90c03-be04-453b-b317-ae41d59a6612
-function naive_pdp(xᵢ)
+function naive_pdp(xᵢ; intercept=false)
 	weights::Vector, _ = Flux.destructure(model) |> cpu
-	β₀ = repeat([weights[end]], size(xᵢ)[1]) |> cpu
-	return (model(xᵢ' |> gpu) |> cpu)
+	x₀ = xᵢ .- xᵢ
+	β₀ = (model(x₀' |> gpu) |> cpu)
+	if intercept == false
+		return (model(xᵢ' |> gpu) |> cpu) .- β₀
+	else
+		return β₀
+	end
 end
 
 # ╔═╡ b430a6a5-369b-4b8d-9994-19121cbedd51
@@ -270,7 +275,7 @@ We can also investigate the bias term -- if any -- by passing a matrix of zeros 
 """
 
 # ╔═╡ 6ccdbe04-4e80-4dd2-92b0-2782bea598fb
-naive_pdp(n_feature(X_valid, [0]))'
+naive_pdp(n_feature(X_valid, [0]); intercept=true)'
 
 # ╔═╡ f73fbb54-ea1e-4c28-9756-d82b7a4fd2ec
 md"""
@@ -343,15 +348,32 @@ md"""
 With the gradients on hand, we can inspect them to identify the estimated change in output, given a change in a feature.
 """
 
-# ╔═╡ 18c48886-a974-4804-867f-43c87fa0fc3f
-Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1], xlabel="x₁", ylabel="β(x₁)", label="")
+# ╔═╡ 9922dd02-c836-4d9e-b268-2d8bac0f463b
+begin
+	Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1], xlabel="x", ylabel="β(x)", label="β(x₁)", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,2] |> cpu, grads_[:,2], label="β(x₂)")
+	Plots.scatter!(X_valid[:,3] |> cpu, grads_[:,3], label="β(x₃)")
+end
+
+# ╔═╡ 6496c18c-528c-48f1-a5d4-c316f869e8c7
+begin
+	Plots.scatter(X_valid[:,4] |> cpu, grads_[:,4], xlabel="x", ylabel="β(x)", label="β(x₄)", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,5] |> cpu, grads_[:,5], label="β(x₅)")
+	Plots.scatter!(X_valid[:,6] |> cpu, grads_[:,6], label="β(x₆)")
+end
+
+# ╔═╡ 80fc29e3-f8f0-4c5d-829d-5eb844f036c9
+begin
+	Plots.scatter(X_valid[:,7] |> cpu, grads_[:,7], xlabel="x", ylabel="β(x)", label="β(x₇)", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,8] |> cpu, grads_[:,8], label="β(x₈)")
+end
 
 # ╔═╡ cc965139-7117-41c9-b5b6-1113c340c478
 (mean(grads_[:,1]), std(grads_[:,1]))
 
 # ╔═╡ 1bb9db2c-b451-4018-8635-49459e7eb423
 md"""
-The plot of $x_1$ above suggests, for the most part, a consistent change in output of 0.5. This matches the gradient of the first term in our actual function.
+The plot of $\beta(x_1)$ above suggests, for the most part, a consistent change in output of 0.5. This matches the gradient of the first term in our actual function. $\beta(x_2)$ also suggests a fairly constant negative gradient, like the gradient of a $cx^2$ term. $\beta(x_4)$ to $\beta(x_6)$ do not appear to provide much information, beyond that $\beta(x_6)$ looks to be strictly positive. $\beta(x_7)$ and $\beta(x_8)$ have gradients close to zero which is good, considering the terms were not actually used in the true underlying function.
 
 If we take this further and get the mean of the absolute values of the gradients, we should have a rough notion of feature importance (per Richman et al.):
 
@@ -372,15 +394,32 @@ Recall a GLM (or single layer perception) has a constant gradient $\beta_i$ for 
 
 $$\hat{y} = \beta_0 + \sum_{i}\beta(x_i)x_i$$
 
-Below is the plot for the term $\beta(x_1)x_1$
+Below are plots of the $\beta(x_i)x_i$ terms on a constant plotting scale:
 """
 
-# ╔═╡ d9ceaee1-cb49-47a5-b531-d6b73ec04f22
-Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1] .* (X_valid[:,1] |> cpu), xlabel="x₁", ylabel="β(x₁)x₁", label="")
+# ╔═╡ 8ff68a00-e452-4bc1-a8a6-f1b77a193ee6
+begin
+	Plots.scatter(X_valid[:,1] |> cpu, grads_[:,1] .* (X_valid[:,1] |> cpu), xlabel="x", ylabel="β(x)x", label="β(x₁)x₁", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,2] |> cpu, grads_[:,2] .* (X_valid[:,2] |> cpu), label="β(x₂)x₂")
+	Plots.scatter!(X_valid[:,3] |> cpu, grads_[:,3] .* (X_valid[:,3] |> cpu), label="β(x₃)x₃")
+end
+
+# ╔═╡ abaf91e8-3d5f-4216-a499-13bee33d62de
+begin
+	Plots.scatter(X_valid[:,4] |> cpu, grads_[:,4] .* (X_valid[:,4] |> cpu), xlabel="x", ylabel="β(x)x", label="β(x₄)x₄", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,5] |> cpu, grads_[:,5] .* (X_valid[:,5] |> cpu), label="β(x₅)x₅")
+	Plots.scatter!(X_valid[:,6] |> cpu, grads_[:,6] .* (X_valid[:,6] |> cpu), label="β(x₆)x₆")
+end
+
+# ╔═╡ 66170d4e-dd79-4e2a-a0c6-270c9b5cf06c
+begin
+	Plots.scatter(X_valid[:,7] |> cpu, grads_[:,7] .* (X_valid[:,7] |> cpu), xlabel="x", ylabel="β(x)x", label="β(x₇)x₇", xlim=(-4,4), ylim=(-4,4))
+	Plots.scatter!(X_valid[:,8] |> cpu, grads_[:,8] .* (X_valid[:,8] |> cpu), label="β(x₈)x₈")
+end
 
 # ╔═╡ e9e145b4-28b1-4532-bcb7-8f4d6ac0120d
 md"""
-If we repeat the process above, we can add each of our terms to produce an estimate for the NN.
+If we add the $\beta(x_i)x_i$ terms above, we can add each of our terms to produce a LocalGLMnet estimate for the NN.
 """
 
 # ╔═╡ 2ffa4bd6-a644-4b6a-94da-c189846ed8cc
@@ -403,7 +442,7 @@ We obtain the intercept for the model showcased previously.
 
 # ╔═╡ 68a41d51-7e39-4d9b-9311-ea1971c8851f
 md"""
-The above error is high, and the plot below indicates there may be a misspecification -- **PR's welcome!**
+The above error is high, and the plot below indicates there may be a misspecification -- **PR's welcome! It can be shown that we can choose an optimal set of parameters than minimise the MSE**
 """
 
 # ╔═╡ 61eb14a9-f03c-4dca-8e0a-ccdf5b9deb50
@@ -419,11 +458,10 @@ The gradients provided a good way to understand the output of the NN better. We 
 # ╔═╡ 63798e54-6173-480d-a57a-253a56d2451f
 function localglmnet(m, X_::Union{CuArray, Matrix})::Matrix
 	ret::Matrix = deepcopy(X_) |> cpu
-	weights::Vector, _ = Flux.destructure(m) |> cpu
 	N::Int64, M::Int64 = size(ret)
-	output = zeros(N)
-	for i ∈ 0:M
-		output = output + (m(n_feature(ret, [i])' |> gpu) |> cpu)'
+	output = naive_pdp(n_feature(ret, [0]); intercept=true)'
+	for i ∈ 1:M
+		output = output + naive_pdp(n_feature(ret, [i]))'
 	end
 	return output
 end
@@ -472,7 +510,8 @@ options = SymbolicRegression.Options(
     unary_operators=[sin, exp, abs],
     populations=50,
 	batching=true,
-	deterministic=true
+	deterministic=true,
+	seed=100
 )
 
 # ╔═╡ 139b2d3e-92e4-453a-bc90-1bb2a113016c
@@ -514,17 +553,19 @@ latexify(string(trees[end-1]))
 md"""
 The above equation can be simplified to get:
 
-$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}|x_3|\sin(2x_3) +\frac{1}{2}x_4 x_5$$
+$$g_{SR}(x) = \frac{1}{2}x_1 - \frac{1}{2}|x_2| + \frac{1}{2}\sin(2x_3 + 0.3) +\frac{1}{2}x_4 x_5$$
+
+**Note that at the time of running, even though we set the search to be determinisitc, their may still be slight differences in output -- it is unclear if this is intended**
 
 Compared to the original equation:
 
 $$f(x) = \frac{1}{2}x_1 - \frac{1}{4}x_2^2 + \frac{1}{2}|x_3|\sin(2x_3) + \frac{1}{2}x_4 x_5 + \frac{1}{8}x_{5}^2x_{6}$$
 
-This suggests the symbolic regression could not pick up the $x_2^2$ term correctly, and the $\frac{1}{8}x_{5}^2x_{6}$ term was excluded (the latter of which is reasonably small).
+This suggests the symbolic regression could not pick up the $x_2^2$ term correctly, the $|x_3|\sin(2x_3)$ term is slightly misspecified, and the $\frac{1}{8}x_{5}^2x_{6}$ term was excluded (the latter of which is reasonably small).
 """
 
 # ╔═╡ d5ccb74e-6259-41da-89dd-d5bb43f0566a
-g_SR(x) = 0.5 .* x[:, 1] .- 0.5 .* abs.(x[:, 2]) + 0.5 .* abs.(x[:, 3]) .* sin.(2 .* x[:, 3]) .+ 0.5 .* x[:, 4] .* x[:, 5]
+g_SR(x) = 0.5 .* x[:, 1] .- 0.5 .* abs.(x[:, 2]) + 0.5.* sin.(2 .* x[:, 3] .+ 0.3) .+ 0.5 .* x[:, 4] .* x[:, 5]
 
 # ╔═╡ e0c6917f-9f27-4cbd-8514-f42211d2ce2a
 begin
@@ -611,13 +652,17 @@ string("Alternative LocalGLMnet Approximation: ", loss((y_valid |> cpu), localgl
 # ╠═b75dacd2-a431-47b4-a5f8-63468aa8cb11
 # ╠═341e3df1-09e9-4877-a541-caf611e5a335
 # ╟─c45cd285-a3a1-45cb-b31c-4a72ffbf0e85
-# ╠═18c48886-a974-4804-867f-43c87fa0fc3f
+# ╠═9922dd02-c836-4d9e-b268-2d8bac0f463b
+# ╠═6496c18c-528c-48f1-a5d4-c316f869e8c7
+# ╠═80fc29e3-f8f0-4c5d-829d-5eb844f036c9
 # ╠═cc965139-7117-41c9-b5b6-1113c340c478
 # ╟─1bb9db2c-b451-4018-8635-49459e7eb423
 # ╠═dabf6494-0a89-4cb2-9cbe-445cb49f52fd
 # ╠═850d7baa-f6fa-4236-bb82-ecffae0e24ea
 # ╟─af323502-02b2-4233-a99e-26007944a778
-# ╠═d9ceaee1-cb49-47a5-b531-d6b73ec04f22
+# ╠═8ff68a00-e452-4bc1-a8a6-f1b77a193ee6
+# ╠═abaf91e8-3d5f-4216-a499-13bee33d62de
+# ╠═66170d4e-dd79-4e2a-a0c6-270c9b5cf06c
 # ╟─e9e145b4-28b1-4532-bcb7-8f4d6ac0120d
 # ╠═2ffa4bd6-a644-4b6a-94da-c189846ed8cc
 # ╟─b5abe10d-1b59-4582-9057-47209dd56c49
