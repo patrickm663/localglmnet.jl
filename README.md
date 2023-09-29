@@ -57,7 +57,7 @@ The results indicate the gradients are fairly similar to our true underlying mod
 
 It is very interesting to note that moving from $\tanh$ to $\text{ReLU}$ activation functions creates jaggered naive PDPs, whereas the above are smooth and output is more predictable.
 
-Below is the gradient of $x_i$ (denoted as $\beta(x_i)$) and the gradient multiplied by the feature (denoted as $\beta(x_i)x_i$).
+Below is the gradient of $x_i$ (denoted as $\beta (x_i)$ here) and the gradient multiplied by the feature (denoted as $\beta(x_i)x_i$).
 
 ![grad2](assets/beta_x.png)
 
